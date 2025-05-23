@@ -35,7 +35,7 @@ SetTimer(fn, 20)
  */
 HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
 
-    static TRANSPARENT_MIN := 1, TRANSPARENT_MAX := 255
+    static TRANSPARENT_MIN := 1, TRANSPARENT_MAX := 254
     static hdesk, hicon, transparent
     static init := False, init_complete_successfully := False
 
