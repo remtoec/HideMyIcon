@@ -36,23 +36,34 @@ SetTimer(fn, 20)
 HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
 
     static TRANSPARENT_MIN := 1, TRANSPARENT_MAX := 255
-    static hdesk, hicon, transparent 
-    static init := False
-    
+    static hdesk, hicon, transparent
+    static init := False, init_complete_successfully := False
+
     if (!init) {
         if (step_size < 1 || step_size > 255)
             throw("Step size must be between 1 and 255.")
 
-        ; Get the handle of the desktop and its' icons
-        if (!hdesk := WinExist("ahk_class Progman"))
-            if (!hdesk := WinExist("ahk_class WorkerW"))
-                hdesk := WinExist("Shell_TrayWnd")
-        hicon := ControlGetHwnd("SysListView321", hdesk)
-
-        ; Register the restore function on exit
-        OnExit((*) => WinSetTransparent(TRANSPARENT_MAX, hicon))
-        transparent := TRANSPARENT_MAX
+        ; Try to get the handle of the desktop (Progman or WorkerW)
+        if (hdesk := WinExist("ahk_class Progman"))
+            hicon := ControlGetHwnd("SysListView321", hdesk)
+        else if (hdesk := WinExist("ahk_class WorkerW"))
+            hicon := ControlGetHwnd("SysListView321", hdesk)
+        
+        ; Check if handles were obtained successfully
+        if (hdesk && hicon) {
+            init_complete_successfully := True
+            ; Register the restore function on exit only if initialization was successful
+            OnExit((*) => WinSetTransparent(TRANSPARENT_MAX, hicon))
+            transparent := TRANSPARENT_MAX
+        } else {
+            init_complete_successfully := False
+        }
         init := True
+    }
+
+    ; If initialization was not successful, exit the function
+    if (!init_complete_successfully) {
+        Return
     }
 
     ; Initialize variables
