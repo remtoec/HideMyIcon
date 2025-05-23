@@ -33,15 +33,23 @@ SetTimer(fn, 20)
  * *   SetTimer(HideMyIcon.Bind(0, 85,  0), 20)   ; Click-triggered effect with a rapid transition.
  * *   SetTimer(HideMyIcon.Bind(0, 255, 0), 1000) ; Click-triggered effect with the quickest transition but with a 1000 ms timer delay.
  */
-HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
+HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) { ; step_size and delay are now ignored
 
-    static TRANSPARENT_MIN := 1, TRANSPARENT_MAX := 255
-    static hdesk, hicon, transparent
+    ; static TRANSPARENT_MIN := 1, TRANSPARENT_MAX := 255 ; Removed for ListView method
+    ; static transparent ; Removed for ListView method
+    static hdesk, hicon
     static init := False, init_complete_successfully := False
+    static icons_visible_lview := True
+
+    static LVM_GETITEMCOUNT := 0x1004
+    static LVM_SETITEMSTATE := 0x102B
+    static LVIF_STATE := 0x0008  ; Flag for LVITEM.mask
+    static LVIS_HIDDEN := 0x0008 ; State flag for hiding
 
     if (!init) {
-        if (step_size < 1 || step_size > 255)
-            throw("Step size must be between 1 and 255.")
+        ; step_size check removed as it's no longer used for transparency
+        ; if (step_size < 1 || step_size > 255)
+        ;     throw("Step size must be between 1 and 255.")
 
         ; Try to get the handle of the desktop (Progman or WorkerW)
         if (hdesk := WinExist("ahk_class Progman"))
@@ -52,9 +60,25 @@ HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
         ; Check if handles were obtained successfully
         if (hdesk && hicon) {
             init_complete_successfully := True
+            icons_visible_lview := True ; Initialize assuming icons are visible
             ; Register the restore function on exit only if initialization was successful
-            OnExit((*) => WinSetTransparent(TRANSPARENT_MAX, hicon))
-            transparent := TRANSPARENT_MAX
+            OnExit Func((exitReason, exitCode) => {
+                ; This lambda captures hicon, icons_visible_lview, LVM_GETITEMCOUNT, LVM_SETITEMSTATE, LVIF_STATE, LVIS_HIDDEN
+                If (!icons_visible_lview && hicon && init_complete_successfully) {
+                    item_count := SendMessage(hicon, LVM_GETITEMCOUNT, 0, 0)
+                    LVITEM_Buffer := Buffer(20)
+                    NumPut("UInt", LVIF_STATE, LVITEM_Buffer, 0)      ; mask
+                    NumPut("Int", 0, LVITEM_Buffer, 4)                ; iItem (ignored for applying to all)
+                    NumPut("Int", 0, LVITEM_Buffer, 8)                ; iSubItem (ignored)
+                    NumPut("UInt", 0, LVITEM_Buffer, 12)              ; state = 0 (not hidden)
+                    NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 16)    ; stateMask = LVIS_HIDDEN
+                    Loop item_count {
+                        SendMessage(hicon, LVM_SETITEMSTATE, A_Index - 1, LVITEM_Buffer)
+                    }
+                    ; icons_visible_lview := True ; Cannot directly modify outer static from here, but state is restored
+                }
+            })
+            ; transparent := TRANSPARENT_MAX ; Removed
         } else {
             init_complete_successfully := False
         }
@@ -92,28 +116,54 @@ HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
 
     ; Determine the direction of the change
     if (mouse_pos ~= "TrayShowDesktopButton|StartMenu|Taskbar")
-        change := 1
+        change := 1 ; Indicates icons should be shown (or remain shown)
     else if (!change_on_hover)
         change := (WinActive(hdesk) || WinActive("ahk_class Shell_TrayWnd")) ? 1 : -1
     else
-        change := (mouse_pos) ? 1 : -1
+        change := (mouse_pos) ? 1 : -1 ; If mouse_pos is empty (not on Desktop/Taskbar), change is -1 (hide)
 
-    ; Calculate the new transparency
-    before := transparent
-    transparent := transparent + change * step_size
-
-    ; On zero transparency, we can't detect the taskbar, nor the show desktop button
-    if (1 > transparent)
-        transparent := TRANSPARENT_MIN
-    else if (transparent > TRANSPARENT_MAX)
-        transparent := TRANSPARENT_MAX
- 
-    ; Set the transparency
-    if (transparent != before)
-        WinSetTransparent(transparent, hicon)
+    ; New Show/Hide Logic using ListView messages
+    if (change == 1 && !icons_visible_lview) { ; Show icons
+        item_count := SendMessage(hicon, LVM_GETITEMCOUNT, 0, 0)
+        if (item_count > 0) {
+            LVITEM_Buffer := Buffer(20)
+            NumPut("UInt", LVIF_STATE, LVITEM_Buffer, 0)      ; mask
+            NumPut("Int", 0, LVITEM_Buffer, 4)                ; iItem (ignored)
+            NumPut("Int", 0, LVITEM_Buffer, 8)                ; iSubItem (ignored)
+            NumPut("UInt", 0, LVITEM_Buffer, 12)              ; state = 0 (not hidden)
+            NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 16)    ; stateMask = LVIS_HIDDEN
+            Loop item_count {
+                SendMessage(hicon, LVM_SETITEMSTATE, A_Index - 1, LVITEM_Buffer)
+            }
+        }
+        icons_visible_lview := True
+    } else if (change == -1 && icons_visible_lview) { ; Hide icons
+        item_count := SendMessage(hicon, LVM_GETITEMCOUNT, 0, 0)
+        if (item_count > 0) {
+            LVITEM_Buffer := Buffer(20)
+            NumPut("UInt", LVIF_STATE, LVITEM_Buffer, 0)      ; mask
+            NumPut("Int", 0, LVITEM_Buffer, 4)                ; iItem (ignored)
+            NumPut("Int", 0, LVITEM_Buffer, 8)                ; iSubItem (ignored)
+            NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 12)    ; state = LVIS_HIDDEN
+            NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 16)    ; stateMask = LVIS_HIDDEN
+            Loop item_count {
+                SendMessage(hicon, LVM_SETITEMSTATE, A_Index - 1, LVITEM_Buffer)
+            }
+        }
+        icons_visible_lview := False
+    }
     
-    ; Add delay
-    if (delay)
-        Sleep(delay)
-    return
+    ; Old transparency logic removed
+    ; before := transparent
+    ; transparent := transparent + change * step_size
+    ; if (1 > transparent)
+    ;     transparent := TRANSPARENT_MIN
+    ; else if (transparent > TRANSPARENT_MAX)
+    ;     transparent := TRANSPARENT_MAX
+    ; if (transparent != before)
+    ;     WinSetTransparent(transparent, hicon)
+    ; if (delay)
+    ;     Sleep(delay)
+
+    Return
 }
