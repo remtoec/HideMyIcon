@@ -68,6 +68,7 @@ HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
 
     ; Initialize variables
     id := ctrl := cls := wnd := ""
+    mouse_pos := ""
     
     ; Get the title and class of the window under the mouse,
     ; MouseGetPos raises an error if the mouse is over the Start Menu
