@@ -62,22 +62,27 @@ HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) { ; step_size 
             init_complete_successfully := True
             icons_visible_lview := True ; Initialize assuming icons are visible
             ; Register the restore function on exit only if initialization was successful
-            OnExit Func((exitReason, exitCode) => {
-                ; This lambda captures hicon, icons_visible_lview, LVM_GETITEMCOUNT, LVM_SETITEMSTATE, LVIF_STATE, LVIS_HIDDEN
+            OnExit(Func((exitReason, exitCode) => {
+                ; This lambda captures static variables from HideMyIcon:
+                ; hicon, icons_visible_lview, init_complete_successfully,
+                ; LVM_GETITEMCOUNT, LVM_SETITEMSTATE, LVIF_STATE, LVIS_HIDDEN.
                 If (!icons_visible_lview && hicon && init_complete_successfully) {
                     item_count := SendMessage(hicon, LVM_GETITEMCOUNT, 0, 0)
-                    LVITEM_Buffer := Buffer(20)
-                    NumPut("UInt", LVIF_STATE, LVITEM_Buffer, 0)      ; mask
-                    NumPut("Int", 0, LVITEM_Buffer, 4)                ; iItem (ignored for applying to all)
-                    NumPut("Int", 0, LVITEM_Buffer, 8)                ; iSubItem (ignored)
-                    NumPut("UInt", 0, LVITEM_Buffer, 12)              ; state = 0 (not hidden)
-                    NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 16)    ; stateMask = LVIS_HIDDEN
-                    Loop item_count {
-                        SendMessage(hicon, LVM_SETITEMSTATE, A_Index - 1, LVITEM_Buffer)
+                    if (item_count > 0) { ; Check if there are items before proceeding
+                        LVITEM_Buffer := Buffer(20)
+                        NumPut("UInt", LVIF_STATE, LVITEM_Buffer, 0)      ; mask
+                        NumPut("Int", 0, LVITEM_Buffer, 4)                ; iItem (ignored for applying to all)
+                        NumPut("Int", 0, LVITEM_Buffer, 8)                ; iSubItem (ignored)
+                        NumPut("UInt", 0, LVITEM_Buffer, 12)              ; state = 0 (not hidden)
+                        NumPut("UInt", LVIS_HIDDEN, LVITEM_Buffer, 16)    ; stateMask = LVIS_HIDDEN
+                        Loop item_count {
+                            SendMessage(hicon, LVM_SETITEMSTATE, A_Index - 1, LVITEM_Buffer)
+                        }
                     }
-                    ; icons_visible_lview := True ; Cannot directly modify outer static from here, but state is restored
+                    ; icons_visible_lview is a static of HideMyIcon.
+                    ; It cannot be directly modified here to reflect the change, but the script is exiting.
                 }
-            })
+            }))
             ; transparent := TRANSPARENT_MAX ; Removed
         } else {
             init_complete_successfully := False
