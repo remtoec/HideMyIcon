@@ -111,6 +111,10 @@ HideMyIcon(change_on_hover := 0, step_size := 17, delay := 16.67) {
     ; Set the transparency
     if (transparent != before)
         WinSetTransparent(transparent, hicon)
+
+    if (transparent == TRANSPARENT_MAX && before != TRANSPARENT_MAX) {
+        WinMove(hdesk,,, ,,)
+    }
     
     ; Add delay
     if (delay)
